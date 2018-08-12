@@ -14,9 +14,7 @@ pub fn ubrr_with(frq_hz: u64, baud_rate: u64) -> u16 {
 }
 
 
-pub enum SerialError {
-    NotReadyToTransmit
-}
+pub enum SerialError {}  //?
 
 pub enum Mode {
     Asynchronous,
@@ -181,15 +179,25 @@ pub fn ready_to_transmit() -> bool {
 }
 
 #[inline]
+pub fn ready_to_receive() -> bool {
+    unsafe { (read_volatile(UCSR0A) & RXC0) != 0 }
+}
+
+#[inline]
 fn do_write<T>(word: T) where
   T: Into<u8> {
     unsafe { write_volatile(UDR0, word.into()); }
 }
 
+#[inline]
+fn do_read() -> u8 {
+    unsafe { read_volatile(UDR0) }
+}
+
 impl<T> serial::Write<T> for Serial<T> where
   T: Into<u8> {
 
-    type Error = SerialError;
+    type Error = !;
 
     #[inline]
     fn write(&mut self, word: T) -> nb::Result<(), Self::Error> {
@@ -199,13 +207,29 @@ impl<T> serial::Write<T> for Serial<T> where
             Ok(())
         }
         else {
-            Err(nb::Error::Other(NotReadyToTransmit))
+            Err(nb::Error::WouldBlock)
         }
     }
 
     #[inline]
     fn flush(&mut self) -> nb::Result<(), Self::Error> {
         Ok(())
+    }
+
+}
+
+impl<T> serial::Read<T> for Serial<T> where
+  T: From<u8> {
+
+    type Error = !;
+
+    fn read(&mut self) -> nb::Result<T, Self::Error> {
+        if ready_to_receive() {
+            Ok(T::from(do_read()))
+        }
+        else {
+            Err(nb::Error::WouldBlock)
+        }
     }
 
 }

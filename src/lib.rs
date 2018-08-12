@@ -1,3 +1,7 @@
+#![deny(missing_docs)]
+#![deny(warnings)]
+#![feature(asm)]
+#![feature(never_type)]
 #![no_std]
 #![feature(lang_items)]
 
