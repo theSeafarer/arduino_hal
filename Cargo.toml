@@ -1,0 +1,18 @@
+[package]
+name = "arduino_hal"
+version = "0.1.0"
+authors = ["Parham <lambdaxmapstox@gmail.com>"]
+
+[dependencies]
+embedded-hal = "0.2.1"
+nb           = "0.1.1"
+
+[dependencies.ux]
+version = "0.1.2"
+default-features = false
+features = []
+
+
+
+[profile.dev]
+incremental = false
