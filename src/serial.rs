@@ -7,39 +7,16 @@ use core::ptr::{read_volatile, write_volatile};
 use core::marker::PhantomData;
 use super::reg::*;
 
+//TODO: interrupt?
+
 
 #[inline(always)]
 pub fn ubrr_with(frq_hz: u64, baud_rate: u64) -> u16 {
-    return (frq_hz / 16 / baud_rate - 1) as u16;
+    return ((frq_hz / 8 / baud_rate - 1) / 2) as u16;
 }
 
 
 pub enum SerialError {}  //?
-
-pub enum Mode {
-    Asynchronous,
-    Synchronous,
-    MasterSpi,
-}
-
-impl Mode {
-    #[inline]
-    fn bits(&self) -> u8 {
-        use self::Mode::*;
-
-        match *self {
-            Asynchronous => 0       | 0,
-            Synchronous  => 0       | UMSEL00,
-            // Reserved  => UMSEL01 | 0,
-            MasterSpi    => UMSEL01 | UMSEL00,
-        }
-    }
-
-    #[inline]
-    fn mask() -> u8 {
-        !(UMSEL01 | UMSEL00)
-    }
-}
 
 pub enum Parity {
     Disabled,
@@ -88,11 +65,8 @@ impl StopBits {
     }
 }
 
-struct Serial<T> {
-  // ubrr: u16,
-  // parity: Parity,
-  // stop_bits: StopBits
-  // mode: Mode
+pub struct Serial<T> {
+  written: bool,
   phantom: PhantomData<T> //pathetic!
 }
 
@@ -129,47 +103,55 @@ impl CharSizeFlag for u7 {
     }
 }
 
-//no u9, because I have no idea what to do about it
+//no u9, because I have no idea how to make it work, yet
 
 impl<T> Serial<T> where
   T: CharSizeFlag + Into<u8> {
-  #[inline]
-  pub fn new(ubrr: u16, parity: Parity, stop: StopBits) -> Self {
-    let mut b: u8 = 0;
-    let mut c: u8 = 0;
-    
-    //character size config
-    let (cb, cc) = T::bits();
-    b |= cb;
-    c |= cc;
-    b &= !(UCSZ01 | UCSZ00);
-    c &= !(UCSZ02);
+    #[inline]
+    pub fn new_with(ubrr: u16, parity: Parity, stop: StopBits) -> Self {
+        let mut b: u8 = 0;
+        let mut c: u8 = 0;
+        
+        //character size config
+        let (cb, cc) = T::bits();
+        b |= cb;
+        c |= cc;
+        b &= !(UCSZ01 | UCSZ00);
+        c &= !(UCSZ02);
 
-    //initial mode config
-    let mode = Mode::Asynchronous;
-    c &= Mode::mask();
-    c |= mode.bits();
+        //initial mode config
+        c &= 0;
+        c |= !(UMSEL01 | UMSEL00);
 
-    //parity config
-    c &= Parity::mask();
-    c |= parity.bits();
+        //parity config
+        c &= Parity::mask();
+        c |= parity.bits();
 
-    //stop bits config
-    c &= StopBits::mask();
-    c |= stop.bits();
+        //stop bits config
+        c &= StopBits::mask();
+        c |= stop.bits();
 
-    //writing the configs
-    unsafe {
-        write_volatile(UBRR0, ubrr);
-        write_volatile(UCSR0A, 0);
-        write_volatile(UCSR0B, b | RXEN0 | TXEN0);
-        write_volatile(UCSR0C, c);
+        //writing the configs
+        unsafe {
+            write_volatile(UBRR0, ubrr);
+            write_volatile(UCSR0A, 0);
+            write_volatile(UCSR0B, b | RXEN0 | TXEN0);
+            write_volatile(UCSR0C, c);
+        }
+
+        Serial {
+            written: false,
+            phantom: PhantomData
+        }
     }
 
-    Serial {
-        phantom: PhantomData
+    #[inline]
+    pub fn new(baud: u64) -> Self {
+        Serial::<T>::new_with(ubrr_with(16_000_000, baud)
+                               , Parity::Disabled
+                               , StopBits::OneBit
+                               )
     }
-  }
 
 }
 
